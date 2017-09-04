@@ -11,14 +11,22 @@ import time
 
 class myscrapy(object):
     _name = "myscrapy"
-    start_url = ["http://www.kmeiju.net"]
-    url_domain = [['www.kmeiju.net', ], ]
+    start_url = ["https://www.jd.com/"]
+    url_domain = [['www.jd.com', ], ]
     Maxdeep = 10
     MAXTHREAT = 10# max threads count
     lock = threading.RLock()
     thread_count = 0
 
-    def __init__(self, delay=0, user_agent=None, timeout=10, retrytimes=2, isrepeat=True):
+    def __init__(self, user_agent=None, timeout=10, retrytimes=2, isrepeat=True, care_mode=False, delay=0):
+        """
+        :param user_agent: 用户代理，默认为chrome浏览器代理
+        :param timeout: 访问url超时时间
+        :param retrytimes: url超时重试次数
+        :param isrepeat: 是否进行重复剔除
+        :param care_mode: 是否进行小心模式
+        :param delay: 小心模式下访问间隔
+        """
         print "init is run"
         self.delay = delay
         if user_agent:
@@ -40,6 +48,8 @@ class myscrapy(object):
         self.Resources_mp4 = []
         self.Resources_jpg = []
         self.lock = threading.RLock()
+        self.care_mode = care_mode
+        self.last_call = time.time()
 
     def start_request(self):
         """开始爬取request"""
@@ -53,18 +63,46 @@ class myscrapy(object):
         self.scrapy_request(call_back=self.data_callback)
 
     def scrapy_request(self, call_back):
-        """消费request，后期可以做成异步访问"""
+        """消费request，后期可以做成多进程访问"""
         print "start scrapy request"
         while self.request or self.thread_count > 0:
-            while self.thread_count < self.MAXTHREAT:
-                myscrapy.thread_count += 1
-                try:
-                    http = self.request.pop()
-                except IndexError as e:
-                    time.sleep(1)
-                    continue
-                t = ScrapyRequest(http, retrytimes=self.retrytimes, callback=call_back)
-                t.start()
+            if not self.care_mode:
+                while self.thread_count < self.MAXTHREAT:
+                    myscrapy.thread_count += 1
+                    try:
+                        http = self.request.pop()
+                    except IndexError as e:
+                        time.sleep(1)
+                        continue
+                    t = ScrapyRequest(http, retrytimes=self.retrytimes, callback=call_back)
+                    t.start()
+            else:
+                retry = 0
+                while retry < self.retrytimes:
+                    try:
+                        if self.delay > 0:
+                            now = time.time()
+                            last = now - self.last_call
+                            if self.delay > last:
+                                time.sleep(int(self.delay-last))
+                        http = self.request.pop()
+                        data = urllib2.urlopen(http, timeout=self.timeout).read()
+                        call_back(data, http)
+                        break
+                    except urllib2.URLError as e:
+                        if isinstance(e.reason, socket.timeout):
+                            print "timeout and retry {}".format(retry)
+                            retry += 1
+                        else:
+                            print 'url is error:', e.message
+                            print http._Request__original
+                            break
+                    except ssl.SSLError as e:
+                        print 'SSLError:', e.message
+                        print http._Request__original
+                    except Exception, e:
+                        print 'unknow Error：', e.message
+                        print http._Request__original
         with open('D:\Python27\workspace\mp4.txt', 'ab') as mp4:
             for line in self.Resources_mp4:
                 mp4.write(str(line) + '\r\n')
@@ -126,6 +164,8 @@ class myscrapy(object):
         pass
 
     def merge_url(self, host, url):
+        if url[0:2] == '//':
+            url = url[1:]
         minlen = 1000
         if minlen > len(host):
             minlen = len(host)
