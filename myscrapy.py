@@ -139,10 +139,6 @@ class myscrapy(object):
         jpgs = webpage_jpg.findall(data)
         # first to complete the url
         host = request._Request__original
-        if host.endswith('.html'):
-            host = host[0:-5]
-        if host.endswith('/'):
-            host = host[0:-1]
         new_urls = []
         self.lock.acquire()
         for url in urls:
@@ -164,21 +160,40 @@ class myscrapy(object):
         pass
 
     def merge_url(self, host, url):
+        if ".com" in url or '.cn' in url or '.net' in url or '.club' in url:
+            if "http://" not in url and "https://" not in url:
+                if "http://" in host:
+                    host = 'http:'
+                elif "https://" in host:
+                    host = "https:"
+                if url[0:2] == '//':
+                    url = host + url
+                else:
+                    url = host + '//' + url
+                return url
+        if not host.endswith('.html'):
+            if not host.endswith('/'):
+                host = host + '/'
         if url[0:2] == '//':
-            url = url[1:]
-        minlen = 1000
-        if minlen > len(host):
-            minlen = len(host)
-        if minlen > len(url):
-            minlen = len(url)
-        maxlike = 0
-        for i in range(minlen):
-            tail_host = host[-1 - i:]
-            head_url = url[0:1 + i]
-            if tail_host == head_url:
-                if maxlike < i:
-                    maxlike = i
-        host = host + url[maxlike:]
+            url = url[2:]
+        print "host = " + host + "\n url=" + url
+        for i in self.start_url:
+            if i in host:
+                host = i + url
+                break
+        # minlen = 1000
+        # if minlen > len(host):
+        #     minlen = len(host)
+        # if minlen > len(url):
+        #     minlen = len(url)
+        # maxlike = 0
+        # for i in range(minlen):
+        #     tail_host = host[-1 - i:]
+        #     head_url = url[0:1 + i]
+        #     if tail_host == head_url:
+        #         if maxlike < i:
+        #             maxlike = i
+        # host = host + url[maxlike:]
         return host
 
 class ScrapyRequest(threading.Thread):
